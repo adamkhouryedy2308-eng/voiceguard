@@ -19,3 +19,7 @@ def compute_eer(scores, labels):
             best_eer = (fa + miss) / 2
     return best_eer, best_t
     
+
+def compute_hter(scores, labels, threshold):
+    fa, miss = rates_at(scores, labels, threshold)
+    return (fa + miss) / 2
