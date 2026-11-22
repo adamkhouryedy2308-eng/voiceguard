@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from voiceguard.dataset import read_protocol
+from voiceguard.dataset import read_in_the_wild, read_protocol
 from voiceguard.features import describe, load_model
 
 OUT_DIR = Path("data/features")
@@ -19,11 +19,12 @@ OUT_DIR = Path("data/features")
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("split", choices=["train", "dev", "eval"])
+    parser.add_argument("split", choices=["train", "dev", "eval", "in_the_wild"])
     parser.add_argument("--limit", type=int, default=None, help="only the first N clips")
     args = parser.parse_args()
 
-    clips = read_protocol(args.split)[: args.limit]
+    clips = read_in_the_wild() if args.split == "in_the_wild" else read_protocol(args.split)
+    clips = clips[: args.limit]
     print(f"{args.split}: {len(clips)} clips")
 
     model = load_model()

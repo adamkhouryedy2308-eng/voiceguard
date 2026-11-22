@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 
 LA_ROOT = Path("data/asvspoof2019/LA")
@@ -23,4 +24,21 @@ def read_protocol(split):
         speaker, file_id, _, attack, label = line.split()
         path = audio_dir / f"{file_id}.flac"
         clips.append((path, 1 if label == "spoof" else 0, attack))
+    return clips
+
+
+ITW_ROOT = Path("data/in_the_wild/release_in_the_wild")
+
+
+def read_in_the_wild():
+    """Read In-the-Wild's meta.csv (file,speaker,label; label is bona-fide or spoof).
+
+    Returns the same (audio_path, label, attack) list as read_protocol.
+    In-the-Wild doesn't name the fake-making tool, so every fake gets attack "ITW".
+    """
+    clips = []
+    with open(ITW_ROOT / "meta.csv", newline="") as f:
+        for row in csv.DictReader(f):
+            fake = row["label"] == "spoof"
+            clips.append((ITW_ROOT / row["file"], 1 if fake else 0, "ITW" if fake else "-"))
     return clips
