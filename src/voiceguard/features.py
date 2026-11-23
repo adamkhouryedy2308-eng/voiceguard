@@ -13,8 +13,10 @@ def load_model():
     return model.to(DEVICE)
 
 
-def describe(model, path):
+def describe(model, path, augment_fn=None):
     audio = load_clip(path)
+    if augment_fn is not None:
+        audio = augment_fn(audio)
     x = torch.tensor(audio).unsqueeze(0)
     x = (x - x.mean()) / x.std()
     with torch.no_grad():

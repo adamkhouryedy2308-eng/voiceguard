@@ -5,11 +5,11 @@ to the test set. Reports test EER (hindsight) and HTER (honest), plus the EER
 for each attack tool separately.
 
 Usage:
-    uv run python scripts/evaluate.py          # eval set
-    uv run python scripts/evaluate.py dev      # sanity check on dev
+    uv run python scripts/evaluate.py eval                        # baseline on eval
+    uv run python scripts/evaluate.py in_the_wild --model logreg_aug
 """
 
-import sys
+import argparse
 from pathlib import Path
 
 import joblib
@@ -21,11 +21,16 @@ FEATURES = Path("data/features")
 
 
 def main():
-    split = sys.argv[1] if len(sys.argv) > 1 else "eval"
-    classifier = joblib.load("models/logreg.joblib")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("split", nargs="?", default="eval")
+    parser.add_argument("--model", default="logreg")
+    args = parser.parse_args()
+    split = args.split
+    classifier = joblib.load(f"models/{args.model}.joblib")
+    print(f"model: {args.model}")
 
     # 1. Freeze the threshold on dev.
-    dev = np.load(FEATURES / "dev_scores.npz")
+    dev = np.load(FEATURES / f"dev_scores_{args.model}.npz")
     _, frozen = compute_eer(dev["scores"], dev["labels"])
     print(f"threshold frozen on dev: {frozen:.2f}")
 
@@ -49,7 +54,7 @@ def main():
         attack_eer, _ = compute_eer(scores[keep], labels[keep])
         print(f"  {attack}: {attack_eer:.2%}")
 
-    np.savez(FEATURES / f"{split}_scores.npz", scores=scores, labels=labels, attacks=test["attacks"])
+    np.savez(FEATURES / f"{split}_scores_{args.model}.npz", scores=scores, labels=labels, attacks=test["attacks"])
 
 
 if __name__ == "__main__":

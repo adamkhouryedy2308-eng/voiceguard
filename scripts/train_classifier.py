@@ -1,9 +1,11 @@
 """Train logistic regression on train features, grade it on dev with EER.
 
 Usage:
-    uv run python scripts/train_classifier.py
+    uv run python scripts/train_classifier.py              # baseline  -> models/logreg.joblib
+    uv run python scripts/train_classifier.py --augment    # + noisy copies -> models/logreg_aug.joblib
 """
 
+import argparse
 from pathlib import Path
 
 import joblib
@@ -19,9 +21,21 @@ MODELS = Path("models")
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--augment", action="store_true", help="also train on the augmented copies")
+    args = parser.parse_args()
+    name = "logreg_aug" if args.augment else "logreg"
+
     # 1. Load the saved XLS-R numbers and labels.
     train = np.load(FEATURES / "train.npz")
     dev = np.load(FEATURES / "dev.npz")
+    X, y = train["features"], train["labels"]
+    if args.augment:
+        # Original clips + their noisy/phone/MP3 copies, stacked into one table.
+        aug = np.load(FEATURES / "train_aug.npz")
+        X = np.concatenate([X, aug["features"]])
+        y = np.concatenate([y, aug["labels"]])
+    print(f"training {name} on {len(y)} clips")
 
     # 2. Build the classifier.
     #    StandardScaler: puts every column on the same scale before the weights.
@@ -32,7 +46,7 @@ def main():
     )
 
     # 3. Learn the weights from train only.
-    classifier.fit(train["features"], train["labels"])
+    classifier.fit(X, y)
 
     # 4. Score every dev clip: column 1 of predict_proba is the chance of "fake".
     dev_scores = classifier.predict_proba(dev["features"])[:, 1]
@@ -43,9 +57,9 @@ def main():
 
     # 6. Save the trained classifier and the dev scores for later (HTER, demo).
     MODELS.mkdir(exist_ok=True)
-    joblib.dump(classifier, MODELS / "logreg.joblib")
-    np.savez(FEATURES / "dev_scores.npz", scores=dev_scores, labels=dev["labels"])
-    print(f"saved classifier to {MODELS / 'logreg.joblib'}")
+    joblib.dump(classifier, MODELS / f"{name}.joblib")
+    np.savez(FEATURES / f"dev_scores_{name}.npz", scores=dev_scores, labels=dev["labels"])
+    print(f"saved classifier to {MODELS / name}.joblib")
 
 
 if __name__ == "__main__":
