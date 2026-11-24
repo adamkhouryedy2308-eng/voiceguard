@@ -9,16 +9,28 @@ def rates_at(scores, labels, threshold):
 
 
 def compute_eer(scores, labels):
-    best_gap = 1.0
-    for t in np.linspace(0, 1, 101):
-        fa, miss = rates_at(scores, labels, t)
-        gap = abs(fa - miss)
-        if gap < best_gap:
-            best_gap = gap
-            best_t = t
-            best_eer = (fa + miss) / 2
-    return best_eer, best_t
-    
+    """Try every score as a threshold and return the one where false alarms ~= misses.
+
+    We used to try only 101 thresholds (0.00, 0.01 ... 1.00). That breaks for
+    very confident models like SSL-AASIST, whose scores sit between 0.99 and
+    0.9998: the balance point falls between two of the 101 marks.
+    """
+    scores = np.asarray(scores, dtype=np.float64)
+    labels = np.asarray(labels)
+    real = np.sort(scores[labels == 0])
+    fake = np.sort(scores[labels == 1])
+    thresholds = np.unique(scores)
+
+    # Rule: score > threshold means "fake" (same as rates_at).
+    # searchsorted counts, for every threshold at once, how many scores are <= it.
+    real_at_or_below = np.searchsorted(real, thresholds, side="right")
+    fake_at_or_below = np.searchsorted(fake, thresholds, side="right")
+    false_alarm = 1 - real_at_or_below / len(real)  # real clips above the line
+    miss = fake_at_or_below / len(fake)  # fake clips at or below the line
+
+    best = np.argmin(np.abs(false_alarm - miss))
+    return (false_alarm[best] + miss[best]) / 2, thresholds[best]
+
 
 def compute_hter(scores, labels, threshold):
     fa, miss = rates_at(scores, labels, threshold)
