@@ -7,6 +7,7 @@ Usage:
     uv run python scripts/score_ssl_aasist.py dev --checkpoint LA_model
     uv run python scripts/score_ssl_aasist.py in_the_wild --checkpoint Best_LA_model_for_DF
     uv run python scripts/score_ssl_aasist.py dev --augment   # messy dev, for choosing the line
+    uv run python scripts/score_ssl_aasist.py dev --checkpoint voiceguard --augment --echo   # our own model
 """
 
 import argparse
@@ -21,16 +22,26 @@ from voiceguard.audio import fix_length, load_clip
 from voiceguard.augment import augment
 from voiceguard.dataset import read_in_the_wild, read_protocol
 from voiceguard.features import DEVICE
-from voiceguard.ssl_aasist import load_original_checkpoint
+from voiceguard.ssl_aasist import SSLAASIST, load_original_checkpoint
 
 FEATURES = Path("data/features")
-NAMES = {"LA_model": "ssl_aasist_la", "Best_LA_model_for_DF": "ssl_aasist_df"}
+NAMES = {"LA_model": "ssl_aasist_la", "Best_LA_model_for_DF": "ssl_aasist_df", "voiceguard": "ssl_aasist_ours"}
+
+
+def load_model(checkpoint):
+    if checkpoint == "voiceguard":
+        # our own model, trained by scripts/train_ssl_aasist.py
+        model = SSLAASIST()
+        model.load_state_dict(torch.load("models/voiceguard/best.pt", map_location="cpu", weights_only=True))
+        return model
+    return load_original_checkpoint(f"models/ssl_aasist/{checkpoint}.pth")
 
 
 class Clips(Dataset):
-    def __init__(self, clips, messy=False):
+    def __init__(self, clips, messy=False, echo=False):
         self.clips = clips
         self.messy = messy
+        self.echo = echo
 
     def __len__(self):
         return len(self.clips)
@@ -42,7 +53,7 @@ class Clips(Dataset):
             # One random generator per clip (seeded by its position), so every
             # run makes exactly the same messy copy, whichever worker loads it.
             rng = np.random.default_rng(i)
-            audio = fix_length(augment(audio, rng), len(audio)).astype(np.float32)
+            audio = fix_length(augment(audio, rng, echo=self.echo), len(audio)).astype(np.float32)
         return torch.tensor(audio)
 
 
@@ -51,6 +62,7 @@ def main():
     parser.add_argument("split", choices=["dev", "eval", "in_the_wild"])
     parser.add_argument("--checkpoint", choices=list(NAMES), default="LA_model")
     parser.add_argument("--augment", action="store_true", help="score messy copies (noise/phone/MP3), e.g. of dev for calibration")
+    parser.add_argument("--echo", action="store_true", help="with --augment: also add room echo (as in our training)")
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
     name = NAMES[args.checkpoint]
@@ -60,8 +72,8 @@ def main():
     clips = clips[: args.limit]
     print(f"{split_name}: {len(clips)} clips, model {name}")
 
-    model = load_original_checkpoint(f"models/ssl_aasist/{args.checkpoint}.pth").eval().to(DEVICE)
-    loader = DataLoader(Clips(clips, messy=args.augment), batch_size=16, num_workers=4)
+    model = load_model(args.checkpoint).eval().to(DEVICE)
+    loader = DataLoader(Clips(clips, messy=args.augment, echo=args.echo), batch_size=16, num_workers=4)
 
     scores = []
     start = time.time()

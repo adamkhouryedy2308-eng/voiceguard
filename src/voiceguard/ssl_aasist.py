@@ -154,7 +154,9 @@ class Residual_block(nn.Module):
 class SSLAASIST(nn.Module):
     """Raw 16 kHz audio (batch, 64600) -> 2 logits: index 0 = spoof, index 1 = bonafide."""
 
-    def __init__(self):
+    def __init__(self, pretrained=False):
+        """pretrained=True starts XLS-R from Meta's weights (to train our own model);
+        False builds an empty one, to be filled from a saved checkpoint."""
         super().__init__()
         filts = [128, [1, 32], [32, 32], [32, 64], [64, 64]]
         gat_dims = [64, 32]
@@ -164,7 +166,10 @@ class SSLAASIST(nn.Module):
         config = Wav2Vec2Config.from_pretrained(XLSR_NAME)
         config.mask_time_prob = 0.0  # original calls fairseq with mask=False
         config.layerdrop = 0.0
-        self.ssl = Wav2Vec2Model(config)
+        if pretrained:
+            self.ssl = Wav2Vec2Model.from_pretrained(XLSR_NAME, config=config)
+        else:
+            self.ssl = Wav2Vec2Model(config)
         self.LL = nn.Linear(1024, 128)
 
         self.first_bn = nn.BatchNorm2d(1)

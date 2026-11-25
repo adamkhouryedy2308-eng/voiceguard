@@ -4,7 +4,12 @@ from transformers import Wav2Vec2Model
 from voiceguard.audio import load_clip
 
 MODEL_NAME = "facebook/wav2vec2-xls-r-300m"
-DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+if torch.cuda.is_available():
+    DEVICE = "cuda"  # NVIDIA GPU (the cluster)
+elif torch.backends.mps.is_available():
+    DEVICE = "mps"  # Apple GPU (the laptop)
+else:
+    DEVICE = "cpu"
 
 
 def load_model():
