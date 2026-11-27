@@ -16,6 +16,8 @@ Usage:
     uv run python scripts/train_ssl_aasist.py --resume
     # Run 2: + RawBoost + random windows, saved in its own folder
     sbatch cluster/train.sh --out models/run2 --rawboost-prob 0.5 --random-windows
+    # Run 3: Run 2 + ASVspoof 5 training data
+    sbatch cluster/train.sh --out models/run3 --rawboost-prob 0.5 --random-windows --extra-train asvspoof5
 """
 
 import argparse
@@ -30,7 +32,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from voiceguard.audio import fix_length, load_audio, load_clip, random_window
 from voiceguard.augment import augment
-from voiceguard.dataset import read_protocol
+from voiceguard.dataset import read_asvspoof5_train, read_protocol
 from voiceguard.features import DEVICE
 from voiceguard.metrics import compute_eer
 from voiceguard.rawboost import rawboost
@@ -98,6 +100,8 @@ def main():
     parser.add_argument("--messy-prob", type=float, default=0.5, help="chance that a train clip is a messy copy")
     parser.add_argument("--rawboost-prob", type=float, default=0.0, help="chance of RawBoost distortion (Run 2: 0.5)")
     parser.add_argument("--random-windows", action="store_true", help="train on random ~4 s pieces, not always the first 4 s")
+    parser.add_argument("--extra-train", choices=["asvspoof5"], default=None,
+                        help="add another training set (Run 3: ASVspoof 5, 182,357 clips)")
     parser.add_argument("--workers", type=int, default=8, help="CPU helpers that load and mess up clips")
     parser.add_argument("--limit", type=int, default=None, help="use only this many train clips (testing)")
     parser.add_argument("--dev-limit", type=int, default=None, help="use only this many dev clips (testing)")
@@ -111,7 +115,10 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    train_set = TrainClips(pick(read_protocol("train"), args.limit, args.seed), args.messy_prob,
+    train_clips = read_protocol("train")
+    if args.extra_train == "asvspoof5":
+        train_clips = train_clips + read_asvspoof5_train()
+    train_set = TrainClips(pick(train_clips, args.limit, args.seed), args.messy_prob,
                            args.rawboost_prob, args.random_windows, args.seed)
     dev_set = TrainClips(pick(read_protocol("dev"), args.dev_limit, args.seed))
     shuffler = torch.Generator()
