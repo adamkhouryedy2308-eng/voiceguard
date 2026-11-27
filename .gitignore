@@ -13,3 +13,6 @@ wheels/
 data/
 .ipynb_checkpoints/
 models/
+
+# Personal plan: kept on this laptop only
+PLAN.md

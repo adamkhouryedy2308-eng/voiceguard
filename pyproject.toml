@@ -1,10 +1,10 @@
 [project]
 name = "voiceguard"
 version = "0.1.0"
-description = "Add your description here"
+description = "Detects AI-generated (deepfake) speech: SSL-AASIST fine-tuned on ASVspoof, tested on real-world audio"
 readme = "README.md"
 authors = [
-    { name = "Adam Khoury", email = "229741132+adamkhouryedy2308-eng@users.noreply.github.com" }
+    { name = "Adam Khoury" }
 ]
 requires-python = ">=3.12"
 dependencies = [
