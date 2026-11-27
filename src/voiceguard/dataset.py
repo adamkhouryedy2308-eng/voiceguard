@@ -107,3 +107,21 @@ def read_df21(fakes=20000, seed=0):
             fake.append((audio_dir / f"{fields[1]}.flac", 1, fields[2]))  # group fakes by codec
     order = np.random.default_rng(seed).permutation(len(fake))[:fakes]
     return real + [fake[j] for j in sorted(order)]
+
+
+ML_ITW_ROOT = Path("data/ml_itw")
+
+
+def read_ml_itw():
+    """ML-ITW (Xue et al., 2026): real-world clips of 180 public figures, 14 languages.
+
+    Second real-world final exam, next to In-the-Wild: test only, never trained on.
+    meta.csv (made by scripts/unpack_ml_itw.py): file,speaker,language,platform,label,
+    label "bona-fide" or "spoof". Every clip, real or fake, is grouped by its language,
+    so evaluate.py can give one EER per language (real vs fake of that language).
+    """
+    clips = []
+    with open(ML_ITW_ROOT / "meta.csv", newline="") as f:
+        for row in csv.DictReader(f):
+            clips.append((ML_ITW_ROOT / row["file"], 1 if row["label"] == "spoof" else 0, row["language"]))
+    return clips

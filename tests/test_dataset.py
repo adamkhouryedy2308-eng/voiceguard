@@ -44,3 +44,17 @@ def test_read_df21_keeps_only_downloaded_part(tmp_path, monkeypatch):
     ]
     # the fake sample is the same every time
     assert dataset.read_df21(fakes=1) == dataset.read_df21(fakes=1)
+
+
+def test_read_ml_itw_groups_by_language(tmp_path, monkeypatch):
+    (tmp_path / "meta.csv").write_text(
+        "file,speaker,language,platform,label\n"
+        "audio/00000.wav,BradPitt,english,youtube,spoof\n"
+        "audio/00001.wav,yuhua,chinese,bilibili,bona-fide\n"
+    )
+    monkeypatch.setattr(dataset, "ML_ITW_ROOT", tmp_path)
+
+    assert dataset.read_ml_itw() == [
+        (tmp_path / "audio" / "00000.wav", 1, "english"),
+        (tmp_path / "audio" / "00001.wav", 0, "chinese"),
+    ]

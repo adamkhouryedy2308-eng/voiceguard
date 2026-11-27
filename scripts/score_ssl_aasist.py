@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from voiceguard.audio import fix_length, load_clip
 from voiceguard.augment import augment
-from voiceguard.dataset import read_df21, read_in_the_wild, read_protocol
+from voiceguard.dataset import read_df21, read_in_the_wild, read_ml_itw, read_protocol
 from voiceguard.features import DEVICE
 from voiceguard.ssl_aasist import SSLAASIST, load_original_checkpoint
 
@@ -68,8 +68,9 @@ class Clips(Dataset):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("split", choices=["dev", "eval", "in_the_wild", "df21"],
-                        help="df21 = the referee (ASVspoof 2021 DF, part 00) for choosing between runs")
+    parser.add_argument("split", choices=["dev", "eval", "in_the_wild", "df21", "ml_itw"],
+                        help="df21 = the referee (ASVspoof 2021 DF, part 00) for choosing between runs; "
+                             "ml_itw = second real-world final exam")
     parser.add_argument("--checkpoint", default="LA_model",
                         help="LA_model, Best_LA_model_for_DF, voiceguard (Run 1), or a path like models/run2/best.pt")
     parser.add_argument("--augment", action="store_true", help="score messy copies (noise/phone/MP3), e.g. of dev for calibration")
@@ -83,6 +84,8 @@ def main():
         clips = read_in_the_wild()
     elif args.split == "df21":
         clips = read_df21()
+    elif args.split == "ml_itw":
+        clips = read_ml_itw()
     else:
         clips = read_protocol(args.split)
     clips = clips[: args.limit]

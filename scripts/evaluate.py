@@ -55,13 +55,21 @@ def main():
     print(f"{split} EER:  {eer:.2%}  (best threshold in hindsight: {best:.4f})")
     print(f"{split} HTER: {hter:.2%}  (false alarms {fa:.2%}, misses {miss:.2%})")
 
-    # 4. EER per attack tool: all real clips vs the fakes from one tool.
-    print("\nEER per attack tool:")
+    # 4. EER per group. Fakes are grouped by attack tool or codec (real clips are "-"),
+    #    so it's all real clips vs that group's fakes. ML-ITW groups real clips too
+    #    (by language), so there it's that language's real vs that language's fakes.
+    print("\nEER per group (attack tool, codec or language):")
+    groups = test["attacks"]
     real = labels == 0
-    for attack in sorted(set(test["attacks"]) - {"-"}):
-        keep = real | (test["attacks"] == attack)
-        attack_eer, _ = compute_eer(scores[keep], labels[keep])
-        print(f"  {attack}: {attack_eer:.2%}")
+    real_groups = set(groups[real]) - {"-"}
+    for group in sorted(set(groups) - {"-"}):
+        keep = (groups == group) if group in real_groups else real | (groups == group)
+        n_real, n_fake = int((labels[keep] == 0).sum()), int((labels[keep] == 1).sum())
+        if n_real == 0 or n_fake == 0:
+            print(f"  {group}: no {'real' if n_real == 0 else 'fake'} clips, skipped")
+            continue
+        group_eer, _ = compute_eer(scores[keep], labels[keep])
+        print(f"  {group}: {group_eer:.2%}  ({n_real} real, {n_fake} fake)")
 
     if classifier_path.exists():
         np.savez(FEATURES / f"{split}_scores_{args.model}.npz", scores=scores, labels=labels, attacks=test["attacks"])
