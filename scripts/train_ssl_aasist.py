@@ -12,8 +12,10 @@ weighted loss (fakes count 0.1, real clips 0.9, because train has ~9 fakes per r
 Usage:
     # tiny test on the laptop: a few clips, 1 epoch, just to see the code runs
     uv run python scripts/train_ssl_aasist.py --limit 16 --dev-limit 32 --epochs 1 --batch-size 2 --workers 2 --out models/voiceguard_test
-    # the real run, on the cluster (cluster/train.sh calls this)
+    # Run 1, on the cluster (cluster/train.sh calls this)
     uv run python scripts/train_ssl_aasist.py --resume
+    # Run 2: + RawBoost + random windows, saved in its own folder
+    sbatch cluster/train.sh --out models/run2 --rawboost-prob 0.5 --random-windows
 """
 
 import argparse
@@ -26,18 +28,21 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 
-from voiceguard.audio import fix_length, load_clip
+from voiceguard.audio import fix_length, load_audio, load_clip, random_window
 from voiceguard.augment import augment
 from voiceguard.dataset import read_protocol
 from voiceguard.features import DEVICE
 from voiceguard.metrics import compute_eer
+from voiceguard.rawboost import rawboost
 from voiceguard.ssl_aasist import SSLAASIST
 
 
 class TrainClips(Dataset):
-    def __init__(self, clips, messy_prob=0.0, seed=0):
+    def __init__(self, clips, messy_prob=0.0, rawboost_prob=0.0, random_windows=False, seed=0):
         self.clips = clips
         self.messy_prob = messy_prob
+        self.rawboost_prob = rawboost_prob
+        self.random_windows = random_windows
         self.seed = seed
         self.epoch = 0  # updated before every epoch, so every epoch gets new messy copies
 
@@ -46,10 +51,16 @@ class TrainClips(Dataset):
 
     def __getitem__(self, i):
         path, label, _ = self.clips[i]
-        audio = load_clip(path)  # 16 kHz, 64,600 samples, repeat-padded (same as scoring)
         # One random generator per (seed, epoch, clip): a rerun makes exactly the same mess.
         rng = np.random.default_rng([self.seed, self.epoch, i])
-        if rng.random() < self.messy_prob:
+        if self.random_windows:
+            audio = random_window(load_audio(path), rng)  # a random ~4 s piece (Run 2)
+        else:
+            audio = load_clip(path)  # always the first ~4 s, repeat-padded (Run 1, and scoring)
+        messy = rng.random() < self.messy_prob
+        if self.rawboost_prob > 0 and rng.random() < self.rawboost_prob:
+            audio = rawboost(audio, rng)  # recording-chain distortions (Run 2)
+        if messy:
             audio = fix_length(augment(audio, rng, echo=True), len(audio)).astype(np.float32)
         # The model's output 0 means fake and 1 means real (the authors' order),
         # while our labels are 1 = fake, so flip it.
@@ -85,6 +96,8 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-6)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--messy-prob", type=float, default=0.5, help="chance that a train clip is a messy copy")
+    parser.add_argument("--rawboost-prob", type=float, default=0.0, help="chance of RawBoost distortion (Run 2: 0.5)")
+    parser.add_argument("--random-windows", action="store_true", help="train on random ~4 s pieces, not always the first 4 s")
     parser.add_argument("--workers", type=int, default=8, help="CPU helpers that load and mess up clips")
     parser.add_argument("--limit", type=int, default=None, help="use only this many train clips (testing)")
     parser.add_argument("--dev-limit", type=int, default=None, help="use only this many dev clips (testing)")
@@ -98,7 +111,8 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    train_set = TrainClips(pick(read_protocol("train"), args.limit, args.seed), args.messy_prob, args.seed)
+    train_set = TrainClips(pick(read_protocol("train"), args.limit, args.seed), args.messy_prob,
+                           args.rawboost_prob, args.random_windows, args.seed)
     dev_set = TrainClips(pick(read_protocol("dev"), args.dev_limit, args.seed))
     shuffler = torch.Generator()
     train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, drop_last=True,

@@ -7,7 +7,8 @@ Usage:
     uv run python scripts/score_ssl_aasist.py dev --checkpoint LA_model
     uv run python scripts/score_ssl_aasist.py in_the_wild --checkpoint Best_LA_model_for_DF
     uv run python scripts/score_ssl_aasist.py dev --augment   # messy dev, for choosing the line
-    uv run python scripts/score_ssl_aasist.py dev --checkpoint voiceguard --augment --echo   # our own model
+    uv run python scripts/score_ssl_aasist.py dev --checkpoint voiceguard --augment   # our Run 1
+    uv run python scripts/score_ssl_aasist.py dev --checkpoint models/run2/best.pt   # any other run
 """
 
 import argparse
@@ -28,13 +29,21 @@ FEATURES = Path("data/features")
 NAMES = {"LA_model": "ssl_aasist_la", "Best_LA_model_for_DF": "ssl_aasist_df", "voiceguard": "ssl_aasist_ours"}
 
 
+def model_name(checkpoint):
+    """Name used in the score file: ssl_aasist_df, ssl_aasist_ours (Run 1), ssl_aasist_run2 ..."""
+    if checkpoint in NAMES:
+        return NAMES[checkpoint]
+    return "ssl_aasist_" + Path(checkpoint).parent.name  # models/run2/best.pt -> ssl_aasist_run2
+
+
 def load_model(checkpoint):
-    if checkpoint == "voiceguard":
-        # our own model, trained by scripts/train_ssl_aasist.py
-        model = SSLAASIST()
-        model.load_state_dict(torch.load("models/voiceguard/best.pt", map_location="cpu", weights_only=True))
-        return model
-    return load_original_checkpoint(f"models/ssl_aasist/{checkpoint}.pth")
+    if checkpoint in ("LA_model", "Best_LA_model_for_DF"):
+        return load_original_checkpoint(f"models/ssl_aasist/{checkpoint}.pth")
+    # our own models, trained by scripts/train_ssl_aasist.py
+    path = "models/voiceguard/best.pt" if checkpoint == "voiceguard" else checkpoint
+    model = SSLAASIST()
+    model.load_state_dict(torch.load(path, map_location="cpu", weights_only=True))
+    return model
 
 
 class Clips(Dataset):
@@ -60,12 +69,13 @@ class Clips(Dataset):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("split", choices=["dev", "eval", "in_the_wild"])
-    parser.add_argument("--checkpoint", choices=list(NAMES), default="LA_model")
+    parser.add_argument("--checkpoint", default="LA_model",
+                        help="LA_model, Best_LA_model_for_DF, voiceguard (Run 1), or a path like models/run2/best.pt")
     parser.add_argument("--augment", action="store_true", help="score messy copies (noise/phone/MP3), e.g. of dev for calibration")
     parser.add_argument("--echo", action="store_true", help="with --augment: also add room echo (as in our training)")
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
-    name = NAMES[args.checkpoint]
+    name = model_name(args.checkpoint)
     split_name = args.split + ("_aug" if args.augment else "")
 
     clips = read_in_the_wild() if args.split == "in_the_wild" else read_protocol(args.split)

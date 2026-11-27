@@ -23,5 +23,7 @@
 
 set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
+source "$HOME/.local/bin/env"   # puts uv on the PATH
+export HF_HUB_OFFLINE=1         # load XLS-R from the copy downloaded on the login node
 nvidia-smi
 uv run python scripts/train_ssl_aasist.py --resume --workers 8 "$@"
